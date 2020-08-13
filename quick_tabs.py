@@ -128,7 +128,8 @@ class CreateWorkflowPage:
 
 class EditWorkflowPage:
 
-    widget = None
+    prev_selected_label = None
+    all_label_widgets = []
 
     def __init__(self, master):
         self.master = master
@@ -147,42 +148,62 @@ class EditWorkflowPage:
         self.workflow_options.bind("<<ComboboxSelected>>", self.option_selected)
         self.master.protocol("WM_DELETE_WINDOW", self.finish)
 
-    def finish(self):
-        Home.set_edit_instance(None)
-        self.master.destroy()
-
     def option_selected(self, event):
-        # gets the currently selected item in the combo box
-        # logging.debug(workflows[event.widget.get()])
+        EditWorkflowPage.check_for_old_widgets()
+
         i = 1
         for item in workflows[event.widget.get()]:
             new_label = Label(self.master, text=item)
             new_label.grid(row=i, column=0)
             new_label.bind("<Button-1>", self.highlight_option)
+            EditWorkflowPage.all_label_widgets.append(new_label)
             i = i+1
 
-    @staticmethod
-    def highlight_option(event):
-        # probably a more concise way to handle this, but it'll do for now.
-        if EditWorkflowPage.widget:
-            if EditWorkflowPage.widget == event.widget:
+    @classmethod
+    def highlight_option(cls, event):
+        if cls.prev_selected_label:
+            if cls.prev_selected_label == event.widget:
                 return
-            EditWorkflowPage.widget.config(bg="white")
-            EditWorkflowPage.widget = event.widget
-            logging.debug("label clicked, widget ref is replaced")
+            cls.prev_selected_label.config(bg="white")
+            cls.prev_selected_label = event.widget
+            logging.debug("label clicked, prev_selected_label ref is replaced")
             event.widget.config(bg="#ffd571")
         else:
-            EditWorkflowPage.widget = event.widget
-            logging.debug("label clicked, no previous widget ref")
+            cls.prev_selected_label = event.widget
+            logging.debug("label clicked, no previous prev_selected_label ref")
             event.widget.config(bg="#ffd571")
 
-    # grab the reference to the widget, then delete it
-    def delete_item(self):
-        logging.debug(f"item {EditWorkflowPage.widget['text']} will be deleted.")
-        EditWorkflowPage.widget.destroy()
-        EditWorkflowPage.widget = None
-        # dynamically updates after deletion, now need to actually update the dictionary and save to data file.
+    @classmethod
+    def delete_item(cls):
+        # TODO: Handle if no url is selected and button is clicked.
 
+        # TODO: Handle saving to the file.
+        with open("data.txt", "r+") as infile:
+            # calling this prevented further execution?
+            # data = infile.read()
+            for line in infile:
+                logging.debug(line)
+                split_tokens = line[:-1].split(": ")
+                title = split_tokens[0]
+                urls = split_tokens[1].strip("][").replace("\'", "").split(", ")
+                for item in urls:
+                    if item == cls.prev_selected_label["text"]:
+                        # urls.remove(item)
+                        logging.debug(urls)
+                        cls.prev_selected_label.destroy()
+                        cls.prev_selected_label = None
+                        break
+
+    @classmethod
+    def check_for_old_widgets(cls):
+        if cls.all_label_widgets:
+            cls.prev_selected_label = None
+            for item in cls.all_label_widgets:
+                item.destroy()
+
+    def finish(self):
+        Home.set_edit_instance(None)
+        self.master.destroy()
 
 # might not even need this class after all
 class ViewWorkflowsPage:
