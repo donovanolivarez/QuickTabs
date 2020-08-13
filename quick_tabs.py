@@ -3,6 +3,7 @@
 import os
 from tkinter import *
 from tkinter import messagebox
+from tkinter import ttk
 import re
 import logging
 
@@ -12,13 +13,14 @@ logging.basicConfig(level=logging.DEBUG)
 
 
 class Home:
+
+    _edit_page_gui = None
+
     def __init__(self, master):
         # window setup
         self.master = master
-        self.ws = self.master.winfo_screenwidth()
-        self.hs = self.master.winfo_screenheight()
-        # potential perform window calculations in a separate block for readability.
-        self.master.geometry(f"{400}x{400}+{(self.ws//2) - (400 // 2)}+{(self.hs//2) - (400 // 2)}")
+        width, height = self.calculate_window_size(400, 400)
+        self.master.geometry(f"{400}x{400}+{width}+{height}")
         self.master.title('Quick Tabs')
 
         # create frames
@@ -49,12 +51,17 @@ class Home:
         CreateWorkflowPage(root2, self.master)
 
     def goto_edit_page(self):
-        root2 = Toplevel(self.master)
-        EditWorkflowPage(root2)
+        # ensures there is only one instance of the window open at a time.
+        if not Home._edit_page_gui:
+            root2 = Toplevel(self.master)
+            Home._edit_page_gui = EditWorkflowPage(root2)
 
     def goto_view_page(self):
         root2 = Toplevel(self.master)
-        ViewWorkflowsPage(root2)
+        gui = ViewWorkflowsPage(root2)
+
+    def calculate_window_size(self, r_width, r_height):
+        return (self.master.winfo_screenwidth() - r_width) // 2, (self.master.winfo_screenheight() - r_height) // 2
 
     @staticmethod
     def _read_data():
@@ -68,6 +75,10 @@ class Home:
         logging.debug("Workflows print out is for ensuring dictionary data is properly read.")
         for title, url in workflows.items():
             print(f'{title}: {url}')
+
+    @classmethod
+    def set_edit_instance(cls, status):
+        cls._edit_page_gui = status
 
 
 class CreateWorkflowPage:
@@ -116,13 +127,64 @@ class CreateWorkflowPage:
 
 
 class EditWorkflowPage:
+
+    widget = None
+
     def __init__(self, master):
         self.master = master
         if not workflows:
             logging.debug("There are no workflows yet! Add a workflow to view this page.")
             self.master.destroy()
 
+        self.master.geometry(f'{600}x{400}')
 
+        self.workflow_options = ttk.Combobox(self.master, values=[*workflows])
+        self.btn_delete = Button(self.master, text="Delete Selected Item", command=self.delete_item)
+
+        self.workflow_options.grid(row=0, column=0)
+        self.btn_delete.grid(row=30, column=0)
+        # add these to the create workflow instance too.
+        self.workflow_options.bind("<<ComboboxSelected>>", self.option_selected)
+        self.master.protocol("WM_DELETE_WINDOW", self.finish)
+
+    def finish(self):
+        Home.set_edit_instance(None)
+        self.master.destroy()
+
+    def option_selected(self, event):
+        # gets the currently selected item in the combo box
+        # logging.debug(workflows[event.widget.get()])
+        i = 1
+        for item in workflows[event.widget.get()]:
+            new_label = Label(self.master, text=item)
+            new_label.grid(row=i, column=0)
+            new_label.bind("<Button-1>", self.highlight_option)
+            i = i+1
+
+    @staticmethod
+    def highlight_option(event):
+        # probably a more concise way to handle this, but it'll do for now.
+        if EditWorkflowPage.widget:
+            if EditWorkflowPage.widget == event.widget:
+                return
+            EditWorkflowPage.widget.config(bg="white")
+            EditWorkflowPage.widget = event.widget
+            logging.debug("label clicked, widget ref is replaced")
+            event.widget.config(bg="#ffd571")
+        else:
+            EditWorkflowPage.widget = event.widget
+            logging.debug("label clicked, no previous widget ref")
+            event.widget.config(bg="#ffd571")
+
+    # grab the reference to the widget, then delete it
+    def delete_item(self):
+        logging.debug(f"item {EditWorkflowPage.widget['text']} will be deleted.")
+        EditWorkflowPage.widget.destroy()
+        EditWorkflowPage.widget = None
+        # dynamically updates after deletion, now need to actually update the dictionary and save to data file.
+
+
+# might not even need this class after all
 class ViewWorkflowsPage:
     pass
 
