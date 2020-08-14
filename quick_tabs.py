@@ -52,9 +52,11 @@ class Home:
 
     def goto_edit_page(self):
         # ensures there is only one instance of the window open at a time.
-        if not Home._edit_page_gui:
+        if Home._edit_page_gui is None and workflows:
             root2 = Toplevel(self.master)
             Home._edit_page_gui = EditWorkflowPage(root2)
+        else:
+            logging.debug("There are no workflows yet, add one to view edit page.")
 
     def goto_view_page(self):
         root2 = Toplevel(self.master)
@@ -72,9 +74,6 @@ class Home:
                 title = split_tokens[0]
                 urls = split_tokens[1].strip("][").replace("\'", "").split(", ")
                 workflows[title] = urls
-        logging.debug("Workflows print out is for ensuring dictionary data is properly read.")
-        for title, url in workflows.items():
-            print(f'{title}: {url}')
 
     @classmethod
     def set_edit_instance(cls, status):
@@ -128,82 +127,114 @@ class CreateWorkflowPage:
 
 class EditWorkflowPage:
 
-    prev_selected_label = None
+    selected_label = None
     all_label_widgets = []
+    selected_combo_option = None
 
     def __init__(self, master):
         self.master = master
         if not workflows:
-            logging.debug("There are no workflows yet! Add a workflow to view this page.")
             self.master.destroy()
 
         self.master.geometry(f'{600}x{400}')
 
         self.workflow_options = ttk.Combobox(self.master, values=[*workflows])
         self.btn_delete = Button(self.master, text="Delete Selected Item", command=self.delete_item)
+        self.btn_edit = Button(self.master, text="Edit Selected Item", command=self.edit_item)
+        self.btn_add = Button(self.master, text="Add New Item", command=self.add_item)
 
-        self.workflow_options.grid(row=0, column=0)
-        self.btn_delete.grid(row=30, column=0)
+        self.workflow_options.grid(row=0, column=0, columnspan=10)
+        self.btn_add.grid(row=30, column=0, padx=50, pady=15)
+        self.btn_edit.grid(row=30, column=1, padx=50, pady=15)
+        self.btn_delete.grid(row=30, column=2, padx=50, pady=15)
         # add these to the create workflow instance too.
         self.workflow_options.bind("<<ComboboxSelected>>", self.option_selected)
         self.master.protocol("WM_DELETE_WINDOW", self.finish)
 
     def option_selected(self, event):
+        EditWorkflowPage.selected_combo_option = event.widget.get()
         EditWorkflowPage.check_for_old_widgets()
 
         i = 1
         for item in workflows[event.widget.get()]:
             new_label = Label(self.master, text=item)
-            new_label.grid(row=i, column=0)
+            new_label.grid(row=i, column=0, columnspan=10)
             new_label.bind("<Button-1>", self.highlight_option)
             EditWorkflowPage.all_label_widgets.append(new_label)
             i = i+1
 
     @classmethod
     def highlight_option(cls, event):
-        if cls.prev_selected_label:
-            if cls.prev_selected_label == event.widget:
+        if cls.selected_label:
+            if cls.selected_label == event.widget:
                 return
-            cls.prev_selected_label.config(bg="white")
-            cls.prev_selected_label = event.widget
+            cls.selected_label.config(bg="white")
+            cls.selected_label = event.widget
             logging.debug("label clicked, prev_selected_label ref is replaced")
             event.widget.config(bg="#ffd571")
         else:
-            cls.prev_selected_label = event.widget
+            cls.selected_label = event.widget
             logging.debug("label clicked, no previous prev_selected_label ref")
             event.widget.config(bg="#ffd571")
 
     @classmethod
     def delete_item(cls):
-        # TODO: Handle if no url is selected and button is clicked.
-
-        # TODO: Handle saving to the file.
-        with open("data.txt", "r+") as infile:
-            # calling this prevented further execution?
-            # data = infile.read()
-            for line in infile:
-                logging.debug(line)
-                split_tokens = line[:-1].split(": ")
-                title = split_tokens[0]
-                urls = split_tokens[1].strip("][").replace("\'", "").split(", ")
-                for item in urls:
-                    if item == cls.prev_selected_label["text"]:
-                        # urls.remove(item)
-                        logging.debug(urls)
-                        cls.prev_selected_label.destroy()
-                        cls.prev_selected_label = None
-                        break
+        if cls.selected_combo_option is None or cls.selected_label is None:
+            messagebox.showerror(title="Error", message="Must select an option first!")
+        else:
+            # destroy clicked label, saves the string for later use.
+            label_str = cls.selected_label.cget("text")
+            cls.selected_label.destroy()
+            cls.selected_label = None
+            # remove selected item from the dictionary
+            for v in workflows[cls.selected_combo_option]:
+                if v == label_str:
+                    workflows[cls.selected_combo_option].remove(v)
+                    break
+            # save the to the file.
+            with open("data.txt", "r") as infile:
+                file_contents = infile.readlines()
+            with open("data.txt", "w+") as outfile:
+                for line in file_contents:
+                    tokens = line[:-1].split(": ")
+                    title, urls = tokens[0], tokens[1].strip("][").replace("\'", "").split(", ")
+                    if not title == cls.selected_combo_option:
+                        outfile.write(f"{title}: {urls}\n")
+                        continue
+                    else:
+                        for line_item in urls:
+                            if line_item == label_str:
+                                urls.remove(line_item)
+                                outfile.write(f"{title}: {urls}\n")
+                                cls.selected_combo_option = None
+                                break
 
     @classmethod
     def check_for_old_widgets(cls):
         if cls.all_label_widgets:
-            cls.prev_selected_label = None
+            cls.selected_label = None
             for item in cls.all_label_widgets:
                 item.destroy()
+
+    def edit_item(self):
+        # create a small entry window.
+        entry_root = Toplevel(self.master)
+        entry_root.title("Edit Item")
+        width, height = self.calculate_window_size(600, 200)
+        entry_root.geometry(f"{600}x{200}+{width}+{height}")
+        ety_item = Entry(entry_root)
+        ety_item.grid(row=0, column=1, columnspan=5, ipadx=70)
+
+    def add_item(self):
+        pass
+
+    def calculate_window_size(self, r_width, r_height):
+        return (self.master.winfo_screenwidth() - r_width) // 2, (self.master.winfo_screenheight() - r_height) // 2
 
     def finish(self):
         Home.set_edit_instance(None)
         self.master.destroy()
+
 
 # might not even need this class after all
 class ViewWorkflowsPage:
