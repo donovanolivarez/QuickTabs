@@ -19,9 +19,10 @@ class Home:
     def __init__(self, master):
         # window setup
         self.master = master
-        width, height = self.calculate_window_size(400, 400)
-        self.master.geometry(f"{400}x{400}+{width}+{height}")
+        width, height = self.calculate_window_size(420, 400)
+        self.master.geometry(f"{420}x{400}+{width}+{height}")
         self.master.title('Quick Tabs')
+        self.master.resizable(False, False)
 
         # create frames
         self.title_frm = Frame(self.master, width=800, height=50, pady=45)
@@ -32,7 +33,7 @@ class Home:
         self.greeting_lbl = Label(self.title_frm, text="Choose an option to get started.")
         self.create_workflow_btn = Button(self.option_frm, text="Create a new workflow", command=self.goto_create_page)
         self.edit_workflow_btn = Button(self.option_frm, text="Edit a workflow", command=self.goto_edit_page)
-        self.view_workflow_btn = Button(self.option_frm, text="View your workflows", command=self.goto_view_page)
+        self.generate_workflow_btn = Button(self.option_frm, text="Generate an executable.", command=self.goto_view_page)
 
         # layout
         self.greeting_lbl.grid(row=0, column=2, columnspan=3)
@@ -40,7 +41,7 @@ class Home:
         self.option_frm.grid(row=1)
         self.create_workflow_btn.grid(row=0, column=0, padx=10)
         self.edit_workflow_btn.grid(row=0, column=1, padx=10)
-        self.view_workflow_btn.grid(row=0, column=2, padx=10)
+        self.generate_workflow_btn.grid(row=0, column=2, padx=10)
 
         # grab data from data.txt
         if os.path.isfile('./data.txt'):
@@ -48,12 +49,15 @@ class Home:
 
     def goto_create_page(self):
         root2 = Toplevel(self.master)
+        root2.grab_set()
         CreateWorkflowPage(root2, self.master)
 
     def goto_edit_page(self):
         # ensures there is only one instance of the window open at a time.
         if Home._edit_page_gui is None and workflows:
             root2 = Toplevel(self.master)
+            root2.resizable(False, False)
+            root2.grab_set()
             Home._edit_page_gui = EditWorkflowPage(root2)
         else:
             logging.debug("There are no workflows yet, add one to view edit page.")
@@ -158,7 +162,7 @@ class EditWorkflowPage:
         i = 1
         for item in workflows[event.widget.get()]:
             new_label = Label(self.master, text=item)
-            new_label.grid(row=i, column=0, columnspan=10)
+            new_label.grid(row=i, column=0, columnspan=10, pady=5)
             new_label.bind("<Button-1>", self.highlight_option)
             EditWorkflowPage.all_label_widgets.append(new_label)
             i = i+1
@@ -182,32 +186,7 @@ class EditWorkflowPage:
         if cls.selected_combo_option is None or cls.selected_label is None:
             messagebox.showerror(title="Error", message="Must select an option first!")
         else:
-            # destroy clicked label, saves the string for later use.
-            label_str = cls.selected_label.cget("text")
-            cls.selected_label.destroy()
-            cls.selected_label = None
-            # remove selected item from the dictionary
-            for v in workflows[cls.selected_combo_option]:
-                if v == label_str:
-                    workflows[cls.selected_combo_option].remove(v)
-                    break
-            # save the to the file.
-            with open("data.txt", "r") as infile:
-                file_contents = infile.readlines()
-            with open("data.txt", "w+") as outfile:
-                for line in file_contents:
-                    tokens = line[:-1].split(": ")
-                    title, urls = tokens[0], tokens[1].strip("][").replace("\'", "").split(", ")
-                    if not title == cls.selected_combo_option:
-                        outfile.write(f"{title}: {urls}\n")
-                        continue
-                    else:
-                        for line_item in urls:
-                            if line_item == label_str:
-                                urls.remove(line_item)
-                                outfile.write(f"{title}: {urls}\n")
-                                cls.selected_combo_option = None
-                                break
+            cls.update_file(mode="del")
 
     @classmethod
     def check_for_old_widgets(cls):
@@ -216,15 +195,58 @@ class EditWorkflowPage:
             for item in cls.all_label_widgets:
                 item.destroy()
 
+    # TODO: add keyword args
+    @classmethod
+    def update_file(cls, *args, mode="del"):
+        logging.debug("function reached.")
+        label_str = cls.selected_label.cget("text")
+        with open("data.txt", "r") as infile:
+            file_contents = infile.readlines()
+        with open("data.txt", "w+") as outfile:
+            for line in file_contents:
+                tokens = line[:-1].split(": ")
+                title, urls = tokens[0], tokens[1].strip("][").replace("\'", "").split(", ")
+                if not title == cls.selected_combo_option:
+                    outfile.write(f"{title}: {urls}\n")
+                    continue
+                else:
+                    if mode == "del":
+                        for line_item in urls:
+                            if line_item == label_str:
+                                urls.remove(line_item)
+                                outfile.write(f"{title}: {urls}\n")
+                                # cls.selected_combo_option = None
+                                cls.selected_label.destroy()
+                                cls.selected_label = None
+                                break
+                    elif mode == "edit":
+                        for line_item in urls:
+                            if line_item == label_str:
+                                index_to_change = urls.index(line_item)
+                                urls[index_to_change] = args[0].get()
+                                workflows[title] = urls
+                                outfile.write(f"{title}: {urls}\n")
+                                cls.selected_label["text"] = args[0].get()
+                                break
+
     def edit_item(self):
         # create a small entry window.
         entry_root = Toplevel(self.master)
         entry_root.title("Edit Item")
-        width, height = self.calculate_window_size(600, 200)
-        entry_root.geometry(f"{600}x{200}+{width}+{height}")
-        ety_item = Entry(entry_root)
-        ety_item.grid(row=0, column=1, columnspan=5, ipadx=70)
+        entry_root.resizable(False, False)
+        entry_root.grab_set()
+        width, height = self.calculate_window_size(600, 80)
+        entry_root.geometry(f"{600}x{80}+{width}+{height}")
 
+        ety_item = Entry(entry_root)
+        lbl = Label(entry_root, text="Enter a new url.")
+        btn_submit = Button(entry_root, text="Submit Change", command=lambda: self.update_file(ety_item, mode="edit"))
+
+        ety_item.grid(row=1, column=1, columnspan=5, ipadx=150, padx=80)
+        lbl.grid(row=0, column=1, columnspan=5, padx=80)
+        btn_submit.grid(row=2, column=1, columnspan=5, padx=80, pady=10)
+
+    # TODO
     def add_item(self):
         pass
 
