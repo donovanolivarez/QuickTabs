@@ -191,6 +191,7 @@ class EditWorkflowPage:
 
     @classmethod
     def check_for_old_widgets(cls):
+        cls.selected_label = None
         for widget in cls.all_label_widgets:
             widget.destroy()
         cls.all_label_widgets.clear()
@@ -247,8 +248,7 @@ class EditWorkflowPage:
                         workflows[title] = urls
                         cls.all_label_widgets.append(lbl_new_item)
                         cls.update_labels()
-                        outfile.write(f"{title}: {urls}")
-                        break
+                        outfile.write(f"{title}: {urls}\n")
 
     def edit_item(self):
         # create a small entry window.
@@ -293,7 +293,6 @@ class EditWorkflowPage:
         # destroy these, loop new values from dictionary.
         num_items = len(cls.all_label_widgets)
         cls.all_label_widgets[num_items - 1].grid(row=num_items, column=0, columnspan=10, pady=5)
-
 
     @staticmethod
     def parse_url(url):
