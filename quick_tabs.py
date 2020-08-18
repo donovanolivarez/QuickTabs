@@ -57,7 +57,7 @@ class Home:
         # ensures there is only one instance of the window open at a time.
         if Home._edit_page_gui is None and workflows:
             root2 = Toplevel(self.master)
-            root2.resizable(False, False)
+            # root2.resizable(False, False)
             root2.grab_set()
             Home._edit_page_gui = EditWorkflowPage(root2)
         else:
@@ -144,124 +144,105 @@ class EditWorkflowPage:
         self.master.geometry(f'{600}x{400}')
 
         self.workflow_options = ttk.Combobox(self.master, values=[*workflows])
+        self.url_list = Listbox(self.master, selectmode=SINGLE, width=55)
+        self.url_list.grid(row=1, column=1, columnspan=1, pady=10,)
         self.btn_delete = Button(self.master, text="Delete Selected Item", command=self.delete_item)
         self.btn_edit = Button(self.master, text="Edit Selected Item", command=self.edit_item)
         self.btn_add = Button(self.master, text="Add New Item", command=self.add_item)
 
-        self.workflow_options.grid(row=0, column=0, columnspan=10)
-        self.btn_add.grid(row=50, column=0, padx=50, pady=15)
-        self.btn_edit.grid(row=50, column=1, padx=50, pady=15)
-        self.btn_delete.grid(row=50, column=2, padx=50, pady=15)
-        # add these to the create workflow instance too.
+        self.workflow_options.grid(row=0, column=0, columnspan=3)
+        self.btn_add.grid(row=50, column=0, padx=15, pady=15)
+        self.btn_edit.grid(row=50, column=1, padx=15, pady=15)
+        self.btn_delete.grid(row=50, column=2, padx=15, pady=15)
+
         self.workflow_options.bind("<<ComboboxSelected>>", self.option_selected)
-        self.master.protocol("WM_DELETE_WINDOW", self.finish)
+        self.master.protocol("WM_DELETE_WINDOW", lambda : self.finish(mode="def"))
+
+        # variables to track the selected options, initially empty strings.
+        self.selected_label = ""
+        self.selected_combo_option = ""
+        self.entry_instance = None
 
     def option_selected(self, event):
-        # if EditWorkflowPage.selected_combo_option is None:
-        EditWorkflowPage.selected_combo_option = event.widget.get()
-        self.check_for_old_widgets()
-
-        i = 1
+        self.selected_combo_option = event.widget.get()
+        logging.debug(self.selected_combo_option)
+        self.clear_list()
         for item in workflows[event.widget.get()]:
-            logging.debug(item)
-            new_label = Label(self.master, text=f"{urlparse(item).netloc}{urlparse(item).path}")
-            new_label.grid(row=i, column=0, columnspan=10, pady=5)
-            new_label.bind("<Button-1>", self.highlight_option)
-            EditWorkflowPage.all_label_widgets.append(new_label)
-            i = i+1
+            self.url_list.insert(END, item)
 
-    @classmethod
-    def highlight_option(cls, event):
-        if cls.selected_label:
-            if cls.selected_label == event.widget:
-                return
-            cls.selected_label.config(bg="white")
-            cls.selected_label = event.widget
-            event.widget.config(bg="#ffd571")
-        else:
-            cls.selected_label = event.widget
-            event.widget.config(bg="#ffd571")
-
-    @classmethod
-    def delete_item(cls):
-        if cls.selected_combo_option is None or cls.selected_label is None:
-            messagebox.showerror(title="Error", message="Must select an option first!")
-        else:
-            cls.update_file(mode="del")
-
-    @classmethod
-    def check_for_old_widgets(cls):
-        cls.selected_label = None
-        for widget in cls.all_label_widgets:
-            widget.destroy()
-        cls.all_label_widgets.clear()
-
-    @classmethod
-    def update_file(cls, *args, mode="del"):
-        # get everything from the data file
+    def execute_operation(self, *args, mode="del"):
         with open("data.txt", "r") as infile:
             file_contents = infile.readlines()
-            logging.debug(file_contents)
-        # open file again for editing, deleting, etc.
         with open("data.txt", "w+") as outfile:
             for line in file_contents:
                 tokens = line[:-1].split(": ")
                 title, urls = tokens[0], tokens[1].strip("][").replace("\'", "").split(", ")
-                if not title == cls.selected_combo_option:
+                if title != self.selected_combo_option:
                     outfile.write(f"{title}: {urls}\n")
                     continue
                 else:
                     if mode == "del":
-                        label_str = cls.selected_label.cget("text")
                         for line_item in urls:
-                            line_item_trim = f"{urlparse(line_item).netloc}{urlparse(line_item).path}"
-                            if line_item_trim == label_str:
+                            # line_item_trim = f"{urlparse(line_item).netloc}{urlparse(line_item).path}"
+                            # logging.debug(line_item_trim)
+                            if line_item == self.selected_label:
                                 urls.remove(line_item)
                                 workflows[title] = urls
                                 outfile.write(f"{title}: {urls}\n")
-                                for widget in cls.all_label_widgets:
-                                    if cls.selected_label.winfo_name() == widget.winfo_name():
-                                        cls.all_label_widgets.remove(widget)
-                                cls.selected_label.destroy()
-                                cls.selected_label = None
+                                self.url_list.delete(ACTIVE)
+                                self.selected_label = ""
                                 break
                                 # Above code looks to be correct.
                     elif mode == "edit":
-                        label_str = cls.selected_label.cget("text")
                         for line_item in urls:
-                            line_item_trim = f"{urlparse(line_item).netloc}{urlparse(line_item).path}"
-                            if line_item_trim == label_str:
+                            if line_item == self.selected_label:
                                 # TODO: Make your code handle multiple instances of a url!
                                 # works as expected, but bugs may occur if the same url is present multiple times.
                                 index_to_change = urls.index(line_item)
                                 urls[index_to_change] = args[0].get()
                                 workflows[title] = urls
                                 outfile.write(f"{title}: {urls}\n")
-                                # why this line?
-                                cls.selected_label["text"] = args[0].get()
+                                self.url_list.delete(ACTIVE)
+                                self.url_list.insert(END, args[0].get())
+                                self.selected_label = ""
+                                logging.debug("written to file!")
+                                self.finish(mode="ent")
                                 break
                                 # bugs may need to be addressed in the edit mode section.
                     elif mode == "add":
                         # add a string the end of the url list, then add a new label.
-                        lbl_new_item = Label(args[1], text=cls.parse_url(args[0].get()))
                         urls.append(args[0].get())
                         workflows[title] = urls
-                        cls.all_label_widgets.append(lbl_new_item)
-                        cls.update_labels()
+                        self.url_list.insert(END, args[0].get())
+                        self.finish(mode="ent")
                         outfile.write(f"{title}: {urls}\n")
 
+    def delete_item(self):
+        self.selected_label = self.url_list.get(ANCHOR)
+        if self.selected_combo_option == "" or self.selected_label == "":
+            messagebox.showerror(title="Error", message="Must select an option first!")
+        else:
+            self.execute_operation(mode="del")
+
+    def clear_list(self):
+        self.url_list.delete(0, END)
+
     def edit_item(self):
-        # create a small entry window.
+        self.selected_label = self.url_list.get(ANCHOR)
+
         entry_root = Toplevel(self.master)
         entry_root.title("Edit Item")
         entry_root.resizable(False, False)
         entry_root.grab_set()
+        entry_root.protocol("WM_DELETE_WINDOW", lambda: self.finish(mode="ent"))
+
         width, height = self.calculate_window_size(600, 80)
         entry_root.geometry(f"{600}x{80}+{width}+{height}")
+        self.entry_instance = entry_root
 
         ety_item = Entry(entry_root)
         lbl = Label(entry_root, text="Edit current url.")
-        btn_submit = Button(entry_root, text="Submit Change", command=lambda: self.update_file(ety_item, self.master, mode="edit"))
+        btn_submit = Button(entry_root, text="Submit Change", command=lambda: self.execute_operation(ety_item, self.master, mode="edit"))
 
         ety_item.grid(row=1, column=1, columnspan=5, ipadx=150, padx=80)
         lbl.grid(row=0, column=1, columnspan=5, padx=80)
@@ -275,10 +256,13 @@ class EditWorkflowPage:
         entry_root.grab_set()
         width, height = self.calculate_window_size(600, 80)
         entry_root.geometry(f"{600}x{80}+{width}+{height}")
+        entry_root.protocol("WM_DELETE_WINDOW", lambda: self.finish(mode="ent"))
+
+        self.entry_instance = entry_root
 
         ety_item = Entry(entry_root)
         lbl = Label(entry_root, text="Enter a new url.")
-        btn_submit = Button(entry_root, text="Submit Change", command=lambda: self.update_file(ety_item, self.master, mode="add"))
+        btn_submit = Button(entry_root, text="Submit Change", command=lambda: self.execute_operation(ety_item, self.master, mode="add"))
 
         ety_item.grid(row=1, column=1, columnspan=5, ipadx=150, padx=80)
         lbl.grid(row=0, column=1, columnspan=5, padx=80)
@@ -287,20 +271,13 @@ class EditWorkflowPage:
     def calculate_window_size(self, r_width, r_height):
         return (self.master.winfo_screenwidth() - r_width) // 2, (self.master.winfo_screenheight() - r_height) // 2
 
-    @classmethod
-    def update_labels(cls):
-        # the labels are not being destroyed, so newly created labels are on top of the previous ones.
-        # destroy these, loop new values from dictionary.
-        num_items = len(cls.all_label_widgets)
-        cls.all_label_widgets[num_items - 1].grid(row=num_items, column=0, columnspan=10, pady=5)
-
-    @staticmethod
-    def parse_url(url):
-        return f"{urlparse(url).netloc}{urlparse(url).path}"
-
-    def finish(self):
-        Home.set_edit_instance(None)
-        self.master.destroy()
+    def finish(self, mode="def"):
+        if mode == "def":
+            Home.set_edit_instance(None)
+            self.master.destroy()
+        elif mode == "ent":
+            self.entry_instance.destroy()
+            self.entry_instance = None
 
 
 # might not even need this class after all
