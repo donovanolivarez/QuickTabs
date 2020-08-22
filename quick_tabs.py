@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
 
-import os
 from tkinter import *
 from tkinter import messagebox
 from tkinter import ttk
-from urllib.parse import urlparse
+from tkinter import filedialog
+import os
+import platform
 import re
 import logging
+import PyInstaller.__main__
 
 workflows = {}
 
@@ -14,7 +16,6 @@ logging.basicConfig(level=logging.DEBUG)
 
 
 class Home:
-
     _edit_page_gui = None
 
     def __init__(self, master):
@@ -34,7 +35,8 @@ class Home:
         self.greeting_lbl = Label(self.title_frm, text="Choose an option to get started.")
         self.create_workflow_btn = Button(self.option_frm, text="Create a new workflow", command=self.goto_create_page)
         self.edit_workflow_btn = Button(self.option_frm, text="Edit a workflow", command=self.goto_edit_page)
-        self.generate_workflow_btn = Button(self.option_frm, text="Generate an executable.", command=self.goto_view_page)
+        self.generate_workflow_btn = Button(self.option_frm, text="Generate an executable.",
+                                            command=self.goto_generate_page)
 
         # layout
         self.greeting_lbl.grid(row=0, column=2, columnspan=3)
@@ -63,9 +65,9 @@ class Home:
         else:
             logging.debug("There are no workflows yet, add one to view edit page.")
 
-    def goto_view_page(self):
+    def goto_generate_page(self):
         root2 = Toplevel(self.master)
-        gui = ViewWorkflowsPage(root2)
+        GeneratePage(root2)
 
     def calculate_window_size(self, r_width, r_height):
         return (self.master.winfo_screenwidth() - r_width) // 2, (self.master.winfo_screenheight() - r_height) // 2
@@ -131,7 +133,6 @@ class CreateWorkflowPage:
 
 
 class EditWorkflowPage:
-
     selected_label = None
     all_label_widgets = []
     selected_combo_option = None
@@ -145,7 +146,7 @@ class EditWorkflowPage:
 
         self.workflow_options = ttk.Combobox(self.master, values=[*workflows])
         self.url_list = Listbox(self.master, selectmode=SINGLE, width=55)
-        self.url_list.grid(row=1, column=1, columnspan=1, pady=10,)
+        self.url_list.grid(row=1, column=1, columnspan=1, pady=10, )
         self.btn_delete = Button(self.master, text="Delete Selected Item", command=self.delete_item)
         self.btn_edit = Button(self.master, text="Edit Selected Item", command=self.edit_item)
         self.btn_add = Button(self.master, text="Add New Item", command=self.add_item)
@@ -156,7 +157,7 @@ class EditWorkflowPage:
         self.btn_delete.grid(row=50, column=2, padx=15, pady=15)
 
         self.workflow_options.bind("<<ComboboxSelected>>", self.option_selected)
-        self.master.protocol("WM_DELETE_WINDOW", lambda : self.finish(mode="def"))
+        self.master.protocol("WM_DELETE_WINDOW", lambda: self.finish(mode="def"))
 
         # variables to track the selected options, initially empty strings.
         self.selected_label = ""
@@ -242,7 +243,8 @@ class EditWorkflowPage:
 
         ety_item = Entry(entry_root)
         lbl = Label(entry_root, text="Edit current url.")
-        btn_submit = Button(entry_root, text="Submit Change", command=lambda: self.execute_operation(ety_item, self.master, mode="edit"))
+        btn_submit = Button(entry_root, text="Submit Change",
+                            command=lambda: self.execute_operation(ety_item, self.master, mode="edit"))
 
         ety_item.grid(row=1, column=1, columnspan=5, ipadx=150, padx=80)
         lbl.grid(row=0, column=1, columnspan=5, padx=80)
@@ -262,7 +264,8 @@ class EditWorkflowPage:
 
         ety_item = Entry(entry_root)
         lbl = Label(entry_root, text="Enter a new url.")
-        btn_submit = Button(entry_root, text="Submit Change", command=lambda: self.execute_operation(ety_item, self.master, mode="add"))
+        btn_submit = Button(entry_root, text="Submit Change",
+                            command=lambda: self.execute_operation(ety_item, self.master, mode="add"))
 
         ety_item.grid(row=1, column=1, columnspan=5, ipadx=150, padx=80)
         lbl.grid(row=0, column=1, columnspan=5, padx=80)
@@ -281,8 +284,59 @@ class EditWorkflowPage:
 
 
 # might not even need this class after all
-class ViewWorkflowsPage:
-    pass
+class GeneratePage:
+    def __init__(self, master):
+        self.master = master
+        self.master.grab_set()
+        if not workflows:
+            self.master.destroy()
+
+        self.master.geometry(f'{400}x{200}')
+        self.master.resizable(False, False)
+
+        self.workflow_options = ttk.Combobox(self.master, values=[*workflows])
+        self.btn_generate = Button(self.master, text="Generate Executable", command=self.generate_script)
+        self.workflow_options.bind("<<ComboboxSelected>>", self.option_selected)
+
+        self.workflow_options.grid(row=0, column=0, columnspan=3)
+        self.btn_generate.grid(row=50, column=0, padx=150, pady=50)
+
+        # variables to keep track of what is selected
+        self.cmb_option = ""
+
+    def option_selected(self, event):
+        self.cmb_option = event.widget.get()
+
+    def generate_script(self):
+        # to figure out platform, platform independence??
+        print(platform.system().lower())
+        # use this to know where to save the dist folder
+        f = filedialog.asksaveasfile()
+        if f is None:
+            return
+        else:
+            # to get the dir of the user's chosen file loc
+            script_name = os.path.basename(f.name) + '.py'
+            print(script_name)
+            new_script = script_name.replace(' ', '-')
+            with open(f"./out_scripts/{script_name}", "w") as outfile:
+                outfile.write(f'#!/usr/bin/env python3\n'
+                              f'import webbrowser\n'
+                              f'for i in {workflows[self.cmb_option]}:\n'
+                              f'    webbrowser.open_new_tab(i)\n')
+
+            path_to_dist = os.path.dirname(f.name)
+            PyInstaller.__main__.run([
+                '--onefile',
+                '--specpath=./specs',
+                '--workpath=./tmp',
+                f'--distpath={path_to_dist}',
+                f'./out_scripts/{script_name}'
+            ])
+
+            # shouldn't need this anymore once the dist path is built, so delete it from where user saves it.
+            f.close()
+            os.remove(f.name)
 
 
 def main():
